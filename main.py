@@ -24,8 +24,8 @@ class TestData(BaseModel):
     plus_count: int
 
 # 테스트 생성
-@app.post("/add_data/")
-async def add_data(data: TestData):
+@app.post("/testcase/")
+async def create_test(data: TestData):
     try:
         print(data)
         # 데이터베이스에 데이터 추가
@@ -42,7 +42,7 @@ async def add_data(data: TestData):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 # 테스트 삭제
-@app.delete("/delete_test/{test_id}/")
+@app.delete("/testcase/{test_id}/")
 def delete_test(test_id: int):
     try:
         cursor.execute("DELETE FROM test WHERE test_id = %s", (test_id,))
@@ -90,7 +90,7 @@ def execute_test(testcase_id: int):
 
 
 # 테스트 결과값 반환
-@app.get("/testcase/{testcase_id}/stats")
+@app.get("/testcase/{testcase_id}/stats/")
 def stats():
     # 테스트 결과 가져오는 SQL
     return
