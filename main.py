@@ -2,6 +2,7 @@ from fastapi import FastAPI
 import mysql.connector
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+import subprocess
 
 app = FastAPI()
 
@@ -15,26 +16,42 @@ conn = mysql.connector.connect(
 cursor = conn.cursor()
 
 # 데이터를 전송하기 위한 모델 정의
-class TestData(BaseModel):
+class Test_Data(BaseModel):
     target_url: str
     test_name: str
     user_num: int
     user_plus_num: int
-    interver_time: float
+    interval_time: int
     plus_count: int
+
+def run_load_testing_script(url, initial_user_count, additional_user_count, interval, repeat_count, test_id):
+    command = [
+        "python",
+        "runner.py",
+        "--url", url,
+        "--initial_user_count", str(initial_user_count),
+        "--additional_user_count", str(additional_user_count),
+        "--interval", str(interval),
+        "--repeat_count", str(repeat_count),
+        "--test_id", str(test_id)
+    ]
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e}")
 
 # 테스트 생성
 @app.post("/testcase/")
-async def create_test(data: TestData):
+async def create_test(data: Test_Data):
     try:
         print(data)
         # 데이터베이스에 데이터 추가
         cursor.execute(
             """
-            INSERT INTO test (TARGET_URL, TEST_NAME, USER_NUM, USER_PLUS_NUM, INTERVER_TIME, PLUS_COUNT)
+            INSERT INTO test (target_url, test_name, user_num, user_plus_num, interval_time, plus_count)
             VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (data.target_url, data.test_name, data.user_num, data.user_plus_num, data.interver_time, data.plus_count)
+            """, 
+            (data.target_url, data.test_name, data.user_num, data.user_plus_num, data.interval_time, data.plus_count)
         )
         conn.commit()
         return {"message": "Data added successfully"}
@@ -64,22 +81,24 @@ def read_list():
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 # runner 실행
-@app.get("/testcase/{testcase_id}/execute/")
-def execute_test(testcase_id: int):
+@app.get("/testcase/{test_id}/execute/")
+def execute_test(test_id: int):
     try:
-        cursor.execute("SELECT * FROM test WHERE test_id = %s", (testcase_id,))
+        cursor.execute("SELECT * FROM test WHERE test_id = %s", (test_id,))
         test_data = cursor.fetchone()  # 해당 튜플을 가져옴
         if test_data:
             # 튜플이 존재할 경우 해당 데이터 반환
-            test_id, target_url, test_name, user_num, user_plus_num, interver_time, plus_count = test_data
+            test_id, target_url, test_name, user_num, user_plus_num, interval_time, plus_count = test_data
+            # 부하 테스트 스크립트 실행
+            result = run_load_testing_script(target_url, user_num, user_plus_num, interval_time, plus_count, test_id)
             return {
                 "test_id": test_id,
                 "target_url": target_url,
                 "test_name": test_name,
                 "user_num": user_num,
                 "user_plus_num": user_plus_num,
-                "intervar_time": interver_time,
-                "plus_count": plus_count
+                "interval_time": interval_time,
+                "plus_count": plus_count,
             }
         else:
             # 튜플이 존재하지 않을 경우 404 에러 반환
@@ -90,7 +109,12 @@ def execute_test(testcase_id: int):
 
 
 # 테스트 결과값 반환
-@app.get("/testcase/{testcase_id}/stats/")
+@app.get("/testcase/{test_id}/stats/")
 def stats():
-    # 테스트 결과 가져오는 SQL
+    try:
+        cursor.execute("SELECT * FROM result")  # test_id와 test_name 모두 가져오기
+        test_cases = cursor.fetchall()
+        return test_cases
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
     return
