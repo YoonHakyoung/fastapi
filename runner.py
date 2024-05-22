@@ -80,11 +80,12 @@ class LoadTester:
 
     # 주기적으로 사용자를 추가하여 부하 테스트를 실행
     # 초기 사용자 수만큼 사용자를 생성하고, 지정된 간격마다 추가 사용자를 생성하여 부하 테스트를 실행
-    def add_users_periodically(self, initial_users, additional_users, interval, repeat_count, url):
+    def add_users_periodically(self, initial_users, additional_users, interval, repeat_count, url, test_id):
         self.spawn_users(initial_users, url)
         for _ in range(repeat_count):
             gevent.sleep(interval)
             self.spawn_users(additional_users, url)
+            self.record_incremental_stats(test_id)
 
     # 응답 시간 리스트의 평균을 계산하여 반환
     def calculate_average_response_time(self):
@@ -100,6 +101,18 @@ class LoadTester:
             return (self.failures / total_requests) * 100
         else:
             return 0
+    
+    # 초당 통계를 기록
+    def record_incremental_stats(self, test_id):
+        current_time = datetime.now().time()
+        average_response_time = self.calculate_average_response_time()
+        failures_per_second = self.failures / len(self.response_times) if self.response_times else 0
+        rps = len(self.response_times) / (sum(self.response_times) / 1000) if self.response_times else 0
+        
+        c.execute('''INSERT INTO incremental (test_id, RPS, Failures_per_second, avg_response_time, number_of_users, recorded_time)
+                     VALUES (%s, %s, %s, %s, %s, %s)''',
+                  (test_id, rps, failures_per_second, average_response_time, len(self.response_times), current_time))
+        conn.commit()
 
 # 테스트 환경 설정 클래스 정의
 class TestEnvironment:
@@ -126,7 +139,7 @@ def main(url, initial_user_count, additional_user_count, interval, repeat_count,
     start_time = datetime.now() # 테스트 시작 시간 기록
     
     # 부하 테스트 실행
-    load_tester.add_users_periodically(initial_user_count, additional_user_count, interval, repeat_count, url)
+    load_tester.add_users_periodically(initial_user_count, additional_user_count, interval, repeat_count, url, test_id)
     
     end_time = datetime.now() # 테스트 종료 시간 기록
     load_duration = end_time - start_time # 테스트 실행 시간 계산
