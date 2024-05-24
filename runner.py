@@ -4,7 +4,7 @@ import logging
 import requests
 import gevent
 from stats_management import RequestStats
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # MySQL 데이터베이스 연결
 db_config = {
@@ -64,6 +64,9 @@ class LoadTester:
         self.environment = environment
         self.response_times = []  
         self.failures = 0 
+        self.request_count = 0  # 초당 요청 수를 추적하기 위한 요청 수 초기화
+        self.start_time = datetime.now()  # 테스트 시작 시간 기록
+        self.last_recorded_time = self.start_time
 
     # 지정된 수의 사용자 객체 생성 -> 동시 요청 처리
     def spawn_users(self, user_count, url):
@@ -74,16 +77,18 @@ class LoadTester:
             users.append(user)
             greenlets.append(gevent.spawn(user.do_work)) 
         gevent.joinall(greenlets) 
+        self.request_count += user_count  # 새로 추가된 사용자 수만큼 요청 수 증가
         return users 
 
     # 주기적으로 사용자를 추가하여 부하 테스트를 실행
     def add_users_periodically(self, initial_users, additional_users, interval, repeat_count, url, test_id):
         self.spawn_users(initial_users, url)
-        for i in range(repeat_count):
-            gevent.sleep(interval)
+        for i in range(repeat_count + 1):
+            for _ in range(interval):  # 1초마다 record_incremental_stats 호출
+                gevent.sleep(1)  # 1초 대기
+                self.record_incremental_stats(test_id)
             self.spawn_users(additional_users, url)
-            self.record_incremental_stats(test_id)
-    
+
     # 응답 시간 리스트의 평균을 계산하여 반환
     def calculate_average_response_time(self):
         if self.response_times:
@@ -101,11 +106,16 @@ class LoadTester:
     
     # 초당 통계를 기록
     def record_incremental_stats(self, test_id):
-        current_time = datetime.now().time()
+        current_time = datetime.now()
         average_response_time = self.calculate_average_response_time()
         failures_per_second = self.failures / len(self.response_times) if self.response_times else 0
-        rps = len(self.response_times) / (sum(self.response_times) / 1000) if self.response_times else 0
-        
+        # 마지막 기록 시점부터 현재 시점까지의 경과 시간
+        elapsed_time = (current_time - self.last_recorded_time).total_seconds()
+        rps = self.request_count / elapsed_time if elapsed_time > 0 else 0
+        print(self.request_count, elapsed_time)
+        # 현재 시점을 마지막 기록 시점으로 업데이트
+        self.last_recorded_time = current_time
+
         c.execute('''INSERT INTO incremental (test_id, RPS, Failures_per_second, avg_response_time, number_of_users, recorded_time)
                      VALUES (%s, %s, %s, %s, %s, %s)''',
                   (test_id, rps, failures_per_second, average_response_time, len(self.response_times), current_time))
