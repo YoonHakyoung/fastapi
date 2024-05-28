@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 # MySQL 데이터베이스 연결
 db_config = {
     'user': 'root',      
-    'password': '0000',   
-    'host': 'localhost',  
-    'database': 'test'    
+    'password': 'test1234',   
+    'host': 'api-database.c98wk66a2xnf.ap-northeast-1.rds.amazonaws.com',  
+    'database': 'api'    
 }
 
 conn = mysql.connector.connect(**db_config)
@@ -81,10 +81,10 @@ class LoadTester:
         return users 
 
     # 주기적으로 사용자를 추가하여 부하 테스트를 실행
-    def add_users_periodically(self, initial_users, additional_users, interval, repeat_count, url, test_id):
+    def add_users_periodically(self, initial_users, additional_users, interval_time, repeat_count, url, test_id):
         self.spawn_users(initial_users, url)
         for i in range(repeat_count + 1):
-            for _ in range(interval):  # 1초마다 record_incremental_stats 호출
+            for _ in range(interval_time):  # 1초마다 record_incremental_stats 호출
                 gevent.sleep(1)  # 1초 대기
                 self.record_incremental_stats(test_id)
             self.spawn_users(additional_users, url)
@@ -145,12 +145,12 @@ def setup_test():
     return environment.load_tester
 
 # 부하 테스트를 설정하고 실행
-def main(url, initial_user_count, additional_user_count, interval, repeat_count, test_id):
+def main(url, initial_user_count, additional_user_count, interval_time, repeat_count, test_id):
     load_tester = setup_test()
     
     start_time = datetime.now() 
     
-    if additional_user_count == 0 or interval == 0 or repeat_count == 0:
+    if additional_user_count == 0 or interval_time == 0 or repeat_count == 0:
         # 스파이크 테스트: 초기 사용자 수만큼 요청을 보냄
         print("Performing spike test...")
         load_tester.spawn_users(initial_user_count, url)
@@ -160,7 +160,7 @@ def main(url, initial_user_count, additional_user_count, interval, repeat_count,
     else:
         # 점진적 테스트: 주기적으로 사용자를 추가하며 요청을 보냄
         print("Performing incremental test...")
-        load_tester.add_users_periodically(initial_user_count, additional_user_count, interval, repeat_count, url, test_id)
+        load_tester.add_users_periodically(initial_user_count, additional_user_count, interval_time, repeat_count, url, test_id)
     
     average_response_time = load_tester.calculate_average_response_time()
     failure_rate = load_tester.calculate_failure_rate()
@@ -176,7 +176,7 @@ if __name__ == "__main__":
     parser.add_argument('--url', type=str, required=True, help='Target URL for load testing')
     parser.add_argument('--initial_user_count', type=int, required=True, help='Initial number of users')
     parser.add_argument('--additional_user_count', type=int, required=True, help='Number of additional users to add periodically')
-    parser.add_argument('--interval', type=int, required=True, help='Interval in seconds between adding additional users')
+    parser.add_argument('--interval_time', type=int, required=True, help='Interval in seconds between adding additional users')
     parser.add_argument('--repeat_count', type=int, required=True, help='Number of times to add additional users')
     parser.add_argument('--test_id', type=int, required=True, help='Test ID')
 
@@ -186,7 +186,7 @@ if __name__ == "__main__":
         url=args.url,
         initial_user_count=args.initial_user_count,
         additional_user_count=args.additional_user_count,
-        interval=args.interval,
+        interval_time=args.interval_time,
         repeat_count=args.repeat_count,
         test_id=args.test_id
     )

@@ -1,22 +1,34 @@
-from fastapi import FastAPI
-import mysql.connector
 from fastapi import FastAPI, HTTPException
+import mysql.connector
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 
 app = FastAPI()
 
-# MySQL 서버에 연결
+
+# CORS 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 허용할 도메인 리스트. 모든 도메인을 허용하려면 ["*"] 사용.
+    allow_credentials=True,
+    allow_methods=["*"],  # 허용할 HTTP 메서드 리스트. 모든 메서드를 허용하려면 ["*"] 사용.
+    allow_headers=["*"],  # 허용할 HTTP 헤더 리스트. 모든 헤더를 허용하려면 ["*"] 사용.
+)
+
+# AWS RDS 서버에 연결
 conn = mysql.connector.connect(
-    host="localhost",
+    host="api-database.c98wk66a2xnf.ap-northeast-1.rds.amazonaws.com",
     user="root",
-    password="0000",
-    database="test"
+    password="test1234",
+    database="api"
 )
 cursor = conn.cursor()
 
 # 데이터를 전송하기 위한 모델 정의
-class Test_Data(BaseModel):
+class TestData(BaseModel):
     target_url: str
     test_name: str
     user_num: int
@@ -24,14 +36,14 @@ class Test_Data(BaseModel):
     interval_time: int
     plus_count: int
 
-def run_load_testing_script(url, initial_user_count, additional_user_count, interval, repeat_count, test_id):
+def run_load_testing_script(url, initial_user_count, additional_user_count, interval_time, repeat_count, test_id):
     command = [
         "python",
         "runner.py",
         "--url", url,
         "--initial_user_count", str(initial_user_count),
         "--additional_user_count", str(additional_user_count),
-        "--interval", str(interval),
+        "--interval_time", str(interval_time),
         "--repeat_count", str(repeat_count),
         "--test_id", str(test_id)
     ]
@@ -40,27 +52,36 @@ def run_load_testing_script(url, initial_user_count, additional_user_count, inte
     except subprocess.CalledProcessError as e:
         print(f"Error: {e}")
 
-# 테스트 생성
-@app.post("/testcase/")
-async def create_test(data: Test_Data):
+# 테스트 목록 불러오기
+@app.get('/testcase')
+async def read_list():
     try:
-        print(data)
-        # 데이터베이스에 데이터 추가
+        cursor.execute("SELECT * FROM test")
+        result = cursor.fetchall()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+# 테스트 생성
+@app.post('/testcase')
+async def create_test(data: TestData):
+    try:
         cursor.execute(
             """
             INSERT INTO test (target_url, test_name, user_num, user_plus_num, interval_time, plus_count)
             VALUES (%s, %s, %s, %s, %s, %s)
-            """, 
+            """,
             (data.target_url, data.test_name, data.user_num, data.user_plus_num, data.interval_time, data.plus_count)
         )
         conn.commit()
-        return {"message": "Data added successfully"}
+        test_id = cursor.lastrowid
+        return {"test_id": test_id, "test_name": data.test_name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 # 테스트 삭제
-@app.delete("/testcase/{test_id}/")
-def delete_test(test_id: int):
+@app.delete("/testcase/{test_id}")
+async def delete_test(test_id: int):
     try:
         cursor.execute("DELETE FROM test WHERE test_id = %s", (test_id,))
         conn.commit()
@@ -68,29 +89,15 @@ def delete_test(test_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-
-# 테스트 케이스 목록 가져오기
-@app.get("/testcase/")
-def read_list():
-    try:
-        cursor.execute("SELECT test_id, test_name FROM test")  # test_id와 test_name 모두 가져오기
-        test_cases = cursor.fetchall()
-        test_cases = {test_id: test_name for test_id, test_name in test_cases}  # test_id와 test_name을 쌍으로 이루는 딕셔너리로 변환
-        return {"test_cases": test_cases}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-
-# runner 실행
+# 테스트 실행
 @app.get("/testcase/{test_id}/execute/")
-def execute_test(test_id: int):
+async def execute_test(test_id: int):
     try:
         cursor.execute("SELECT * FROM test WHERE test_id = %s", (test_id,))
-        test_data = cursor.fetchone()  # 해당 튜플을 가져옴
+        test_data = cursor.fetchone()
         if test_data:
-            # 튜플이 존재할 경우 해당 데이터 반환
             test_id, target_url, test_name, user_num, user_plus_num, interval_time, plus_count = test_data
-            # 부하 테스트 스크립트 실행
-            result = run_load_testing_script(target_url, user_num, user_plus_num, interval_time, plus_count, test_id)
+            run_load_testing_script(target_url, user_num, user_plus_num, interval_time, plus_count, test_id)
             return {
                 "test_id": test_id,
                 "target_url": target_url,
@@ -101,20 +108,19 @@ def execute_test(test_id: int):
                 "plus_count": plus_count,
             }
         else:
-            # 튜플이 존재하지 않을 경우 404 에러 반환
             raise HTTPException(status_code=404, detail="Testcase not found")
     except Exception as e:
-        # 예외 발생 시 500 에러 반환
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-
-
+    
 # 테스트 결과값 반환
 @app.get("/testcase/{test_id}/stats/")
-def stats():
+async def stats(test_id: int):
     try:
-        cursor.execute("SELECT * FROM result")  # test_id와 test_name 모두 가져오기
+        cursor.execute("SELECT * FROM incremental WHERE test_id = %s", (test_id,))
         test_cases = cursor.fetchall()
-        return test_cases
+        if test_cases:
+            return test_cases
+        else:
+            raise HTTPException(status_code=404, detail="No stats found for this test_id")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-    return
