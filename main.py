@@ -124,3 +124,16 @@ async def stats(test_id: int):
             raise HTTPException(status_code=404, detail="No stats found for this test_id")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+    
+# 테스트 결과값 반환
+@app.get("/testcase/{test_id}/pre-stats/")
+async def stats(test_id: int):
+    try:
+        cursor.execute("SELECT * FROM example WHERE test_id = %s", (test_id,))
+        test_cases = cursor.fetchall()
+        if test_cases:
+            return test_cases
+        else:
+            raise HTTPException(status_code=404, detail="No stats found for this test_id")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
