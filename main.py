@@ -18,13 +18,21 @@ app.add_middleware(
     allow_headers=["*"],  # 허용할 HTTP 헤더 리스트. 모든 헤더를 허용하려면 ["*"] 사용.
 )
 
-# AWS RDS 서버에 연결
-conn = mysql.connector.connect(
-    host="api-database.c98wk66a2xnf.ap-northeast-1.rds.amazonaws.com",
-    user="root",
-    password="test1234",
-    database="api"
-)
+# # AWS RDS 서버에 연결
+# conn = mysql.connector.connect(
+#     host="api-database.c98wk66a2xnf.ap-northeast-1.rds.amazonaws.com",
+#     user="root",
+#     password="test1234",
+#     database="api"
+# )
+db_config = {
+    'user': 'root',      
+    'password': '0000',   
+    'host': 'localhost',  
+    'database': 'test'    
+}
+
+conn = mysql.connector.connect(**db_config)
 cursor = conn.cursor()
 
 # 데이터를 전송하기 위한 모델 정의
@@ -52,7 +60,7 @@ def run_load_testing_script(url, initial_user_count, additional_user_count, inte
     except subprocess.CalledProcessError as e:
         print(f"Error: {e}")
 
-# 테스트 목록 불러오기
+# 테스트 목록 불러오기 o
 @app.get('/testcase')
 async def read_list():
     try:
@@ -62,7 +70,7 @@ async def read_list():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-# 테스트 생성
+# 테스트 생성 o
 @app.post('/testcase')
 async def create_test(data: TestData):
     try:
@@ -79,7 +87,7 @@ async def create_test(data: TestData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-# 테스트 삭제
+# 테스트 삭제 o
 @app.delete("/testcase/{test_id}")
 async def delete_test(test_id: int):
     try:
@@ -89,10 +97,11 @@ async def delete_test(test_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
-# 테스트 실행
+# 테스트 실행 o
 @app.get("/testcase/{test_id}/execute/")
 async def execute_test(test_id: int):
     try:
+        cursor = conn.cursor()
         cursor.execute("SELECT * FROM test WHERE test_id = %s", (test_id,))
         test_data = cursor.fetchone()
         if test_data:
@@ -116,24 +125,36 @@ async def execute_test(test_id: int):
 @app.get("/testcase/{test_id}/stats/")
 async def stats(test_id: int):
     try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
         cursor.execute("SELECT * FROM incremental WHERE test_id = %s", (test_id,))
-        test_cases = cursor.fetchall()
-        if test_cases:
-            return test_cases
+        updated_stats = cursor.fetchall()
+        if updated_stats:
+            return updated_stats
         else:
-            raise HTTPException(status_code=404, detail="No stats found for this test_id")
+            raise HTTPException(status_code=404, detail="No updated stats found for this test_id")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+# 테스트 결과값 반환
+@app.get("/testcase/{test_id}/pre-stats/")
+async def pre_stats(test_id: int):
+    try:
+        cursor.execute("SELECT * FROM example WHERE test_id = %s", (test_id,))
+        updated_stats = cursor.fetchall()
+        if updated_stats:
+            return updated_stats
+        else:
+            raise HTTPException(status_code=404, detail="No updated stats found for this test_id")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
     
-# 테스트 결과값 반환
-@app.get("/testcase/{test_id}/pre-stats/")
-async def stats(test_id: int):
+# 테스트 결과 삭제
+@app.delete("/testcase/{test_id}/stats/")
+async def delete_test(test_id: int):
     try:
-        cursor.execute("SELECT * FROM example WHERE test_id = %s", (test_id,))
-        test_cases = cursor.fetchall()
-        if test_cases:
-            return test_cases
-        else:
-            raise HTTPException(status_code=404, detail="No stats found for this test_id")
+        cursor.execute("DELETE FROM incremental WHERE test_id = %s", (test_id,))
+        conn.commit()
+        return {"message": "Test Result deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")

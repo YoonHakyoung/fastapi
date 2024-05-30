@@ -7,11 +7,18 @@ from stats_management import RequestStats
 from datetime import datetime, timedelta
 
 # MySQL 데이터베이스 연결
+# db_config = {
+#     'user': 'root',      
+#     'password': 'test1234',   
+#     'host': 'api-database.c98wk66a2xnf.ap-northeast-1.rds.amazonaws.com',  
+#     'database': 'api'    
+# }
+
 db_config = {
     'user': 'root',      
-    'password': 'test1234',   
-    'host': 'api-database.c98wk66a2xnf.ap-northeast-1.rds.amazonaws.com',  
-    'database': 'api'    
+    'password': '0000',   
+    'host': 'localhost',  
+    'database': 'test'    
 }
 
 conn = mysql.connector.connect(**db_config)
