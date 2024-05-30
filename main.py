@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 import mysql.connector
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -18,13 +18,20 @@ app.add_middleware(
     allow_headers=["*"],  # 허용할 HTTP 헤더 리스트. 모든 헤더를 허용하려면 ["*"] 사용.
 )
 
-# # AWS RDS 서버에 연결
-# conn = mysql.connector.connect(
-#     host="api-database.c98wk66a2xnf.ap-northeast-1.rds.amazonaws.com",
-#     user="root",
-#     password="test1234",
-#     database="api"
-# )
+# 웹 소켓 연결을 위한 클래스
+class WebSocketData(BaseModel):
+    action: str
+    data: dict
+
+# 클라이언트에서 웹 소켓에 연결할 때 실행될 함수
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    while True:
+        data = await websocket.receive_text()
+        await websocket.send_text(f"Message text was: data")
+
+# DB
 db_config = {
     'user': 'root',      
     'password': '0000',   
