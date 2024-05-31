@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import subprocess
+import logging
+import asyncio
 
 app = FastAPI()
 
@@ -17,19 +19,6 @@ app.add_middleware(
     allow_methods=["*"],  # 허용할 HTTP 메서드 리스트. 모든 메서드를 허용하려면 ["*"] 사용.
     allow_headers=["*"],  # 허용할 HTTP 헤더 리스트. 모든 헤더를 허용하려면 ["*"] 사용.
 )
-
-# 웹 소켓 연결을 위한 클래스
-class WebSocketData(BaseModel):
-    action: str
-    data: dict
-
-# 클라이언트에서 웹 소켓에 연결할 때 실행될 함수
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-        await websocket.send_text(f"Message text was: data")
 
 # DB
 db_config = {
@@ -51,7 +40,7 @@ class TestData(BaseModel):
     interval_time: int
     plus_count: int
 
-def run_load_testing_script(url, initial_user_count, additional_user_count, interval_time, repeat_count, test_id):
+async def run_load_testing_script(url, initial_user_count, additional_user_count, interval_time, repeat_count, test_id):
     command = [
         "python",
         "runner.py",
@@ -63,8 +52,9 @@ def run_load_testing_script(url, initial_user_count, additional_user_count, inte
         "--test_id", str(test_id)
     ]
     try:
-        subprocess.run(command, check=True)
-    except subprocess.CalledProcessError as e:
+        process = await asyncio.create_subprocess_exec(*command)
+        await process.wait()
+    except Exception as e:
         print(f"Error: {e}")
 
 # 테스트 목록 불러오기 o
@@ -113,7 +103,7 @@ async def execute_test(test_id: int):
         test_data = cursor.fetchone()
         if test_data:
             test_id, target_url, test_name, user_num, user_plus_num, interval_time, plus_count = test_data
-            run_load_testing_script(target_url, user_num, user_plus_num, interval_time, plus_count, test_id)
+            await run_load_testing_script(target_url, user_num, user_plus_num, interval_time, plus_count, test_id)
             return {
                 "test_id": test_id,
                 "target_url": target_url,

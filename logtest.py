@@ -1,51 +1,46 @@
-# main.py
-
-from fastapi import FastAPI, WebSocket
 import logging
-import asyncio
-
-app = FastAPI()
+import subprocess
 
 # 로그 설정
+logging.basicConfig(level=logging.DEBUG)
+
+# 로그 출력 후 작업을 수행할 핸들러 생성
+class MyHandler(logging.Handler):
+    def emit(self, record):
+        print("## log 내용 : " + self.format(record))
+
+# 로거 생성
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-# WebSocket 연결을 위한 세트
-connected_clients = set()
+# 핸들러 추가
+logger.addHandler(MyHandler())
 
-# WebSocket 엔드포인트
-class LogWebSocket(WebSocket):
-    async def on_connect(self, websocket):
-        await websocket.accept()
-        connected_clients.add(websocket)
+# 예시 로그 출력
+#logger.debug('DEBUG:urllib3.connectionpool:http://example.com:80 "GET / HTTP/1.1" 200 648')
+#logger.debug('DEBUG:root:Request to http://example.com successful. Response time: 301.663 ms, Content length: 1256 bytes')
 
-    async def on_disconnect(self, websocket, close_code):
-        connected_clients.remove(websocket)
+# 매개변수 설정
+url = "http://example.com"
+initial_user_count = 10
+additional_user_count = 5
+interval_time = 2
+repeat_count = 3
+test_id = 123
 
-# 로그를 WebSocket 클라이언트에 전송하는 함수
-async def send_logs_to_clients(log_message):
-    for client in connected_clients:
-        await client.send_text(log_message)
+# 명령어 설정
+command = [
+    "python",
+    "runner.py",
+    "--url", url,
+    "--initial_user_count", str(initial_user_count),
+    "--additional_user_count", str(additional_user_count),
+    "--interval_time", str(interval_time),
+    "--repeat_count", str(repeat_count),
+    "--test_id", str(test_id)
+]
 
-# 예시 API 엔드포인트
-@app.get("/")
-async def read_root():
-    logger.info("Root endpoint accessed")
-    await send_logs_to_clients("Root endpoint accessed")
-    return {"message": "Hello, World!"}
+# 명령어 실행
+subprocess.run(command)
 
-# WebSocket 경로 등록
-app.add_websocket_route("/ws", LogWebSocket)
-
-# 5초에 한 번 로그를 생성하는 함수
-async def generate_logs():
-    while True:
-        logger.info("Logging every 5 seconds")
-        await asyncio.sleep(5)
-
-# asyncio 이벤트 루프에서 로그 생성 함수 실행
-async def start_log_generation():
-    await generate_logs()
-
-if __name__ == "__main__":
-    asyncio.create_task(start_log_generation())
+# 변수에 저장된 로그 메시지 출력
+# print(variable_handler.log_messages)
