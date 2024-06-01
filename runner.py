@@ -6,11 +6,11 @@ import gevent
 from stats_management import RequestStats
 from datetime import datetime, timedelta
 
-# MySQL 데이터베이스 연결
+# 데이터베이스 연결
 # db_config = {
 #     'user': 'root',      
 #     'password': 'test1234',   
-#     'host': 'api-database.c98wk66a2xnf.ap-northeast-1.rds.amazonaws.com',  
+#     'host': 'database-eof.cnakai2m8xfm.ap-northeast-1.rds.amazonaws.com', 
 #     'database': 'api'    
 # }
 
@@ -133,10 +133,18 @@ class LoadTester:
         average_response_time = self.calculate_average_response_time()
         failure_rate = self.calculate_failure_rate()
         num_users = len(self.response_times)
+
+        # 동일한 test_id가 존재하는지 확인
+        c.execute('SELECT * FROM spike WHERE test_id = %s', (test_id,))
+        exists = c.fetchone()
+
+        # 동일한 test_id가 존재하면 삭제 및 새로운 값 삽입
+        if exists:
+            c.execute('DELETE FROM spike WHERE test_id = %s', (test_id,))
         
         c.execute('''INSERT INTO spike (test_id, Failures, avg_response_time, num_user, load_duration)
                      VALUES (%s, %s, %s, %s, %s)''',
-                  (test_id, self.failures, average_response_time, num_users, str(load_duration)))
+                  (test_id, failure_rate, average_response_time, num_users, str(load_duration)))
         conn.commit()
 
 # 테스트 환경 설정 클래스 정의

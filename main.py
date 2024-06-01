@@ -134,10 +134,10 @@ async def stats(test_id: int):
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
 # 테스트 결과값 반환
-@app.get("/testcase/{test_id}/pre-stats/")
+@app.get("/testcase/{test_id}/spike-stats/")
 async def pre_stats(test_id: int):
     try:
-        cursor.execute("SELECT * FROM example WHERE test_id = %s", (test_id,))
+        cursor.execute("SELECT * FROM spike WHERE test_id = %s", (test_id,))
         updated_stats = cursor.fetchall()
         if updated_stats:
             return updated_stats
